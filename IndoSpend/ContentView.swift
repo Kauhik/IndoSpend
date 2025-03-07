@@ -77,6 +77,18 @@ struct ContentView: View {
                         .padding(.horizontal)
                     
                     HStack {
+                        
+                        Button(action: {
+                            // Present receipt scanner
+                            showReceiptScanner = true
+                        }) {
+                            Image(systemName: "camera")
+                                .font(.title)
+                        }
+                        
+                        Spacer()
+
+                        
                         Button(action: {
                             // Add expense manually
                             if let amount = Double(amountInput), !descriptionInput.isEmpty {
@@ -88,15 +100,7 @@ struct ContentView: View {
                             Text("Add Expense")
                         }
                         
-                        Spacer()
                         
-                        Button(action: {
-                            // Present receipt scanner
-                            showReceiptScanner = true
-                        }) {
-                            Image(systemName: "camera")
-                                .font(.title)
-                        }
                         
                         Spacer()
                         
