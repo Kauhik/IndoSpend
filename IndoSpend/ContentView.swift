@@ -221,26 +221,9 @@ struct ContentView: View {
                                     }
                                 }
                                 
-                                Button(action: {
-                                    if selectedCurrency == .SGD {
-                                        if let base = Double(baseAmountSGDInput) {
-                                            viewModel.baseAmountSGD = base
-                                        }
-                                    } else {
-                                        if let base = Double(baseAmountIDRInput) {
-                                            viewModel.baseAmountIDR = base
-                                        }
-                                    }
-                                    
-                                    if let amount = Double(amountInput), !descriptionInput.isEmpty {
-                                        viewModel.addExpense(amount: amount, expenseDescription: descriptionInput, currency: selectedCurrency)
-                                        amountInput = ""
-                                        descriptionInput = ""
-                                        isAmountFocused = false
-                                        isDescriptionFocused = false
-                                    }
-                                }) {
-                                    Text("Add Expense")
+                                // Replace the Add Expense button with a NavigationLink to the chart view.
+                                NavigationLink(destination: SpendingChartView(selectedCurrency: selectedCurrency)) {
+                                    Text("View Chart")
                                         .fontWeight(.semibold)
                                         .foregroundColor(.white)
                                         .frame(maxWidth: .infinity)
