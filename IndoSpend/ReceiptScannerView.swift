@@ -29,7 +29,7 @@ struct ReceiptScannerView: UIViewControllerRepresentable {
         func imagePickerController(_ picker: UIImagePickerController,
                                    didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
             picker.dismiss(animated: true)
-            if let image = info[.originalImage] as? UIImage {
+            if info[.originalImage] is UIImage {
                 // Here you would perform OCR using the Vision framework.
                 // For demonstration, we simulate a recognized expense.
                 let recognizedAmount: Double = 20.0

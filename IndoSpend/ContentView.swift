@@ -9,121 +9,324 @@ struct ContentView: View {
     
     @State private var showReceiptScanner = false
     @State private var showVoiceInput = false
+    @State private var keyboardHeight: CGFloat = 0
+    
+    @FocusState private var isBaseAmountFocused: Bool
+    @FocusState private var isAmountFocused: Bool
+    @FocusState private var isDescriptionFocused: Bool
 
     var body: some View {
         NavigationView {
-            VStack {
-                // Picker for currency tracker
-                Picker("Currency", selection: $selectedCurrency) {
-                    Text("SGD").tag(Currency.SGD)
-                    Text("IDR").tag(Currency.IDR)
-                }
-                .pickerStyle(SegmentedPickerStyle())
-                .padding()
+            ZStack {
+                backgroundColor()
+                    .ignoresSafeArea()
                 
-                // Input for base amount (only for the selected tracker)
-                HStack {
-                    Text("Base Amount (\(selectedCurrency.rawValue)):")
-                    TextField("Enter amount", text: $baseAmountInput, onCommit: {
-                        if let amount = Double(baseAmountInput) {
-                            if selectedCurrency == .SGD {
-                                viewModel.baseAmountSGD = amount
-                                // Optionally, update the IDR base using conversion
-                                viewModel.baseAmountIDR = viewModel.convertedAmount(sgdAmount: amount)
-                            } else {
-                                viewModel.baseAmountIDR = amount
-                            }
-                        }
-                    })
-                    .keyboardType(.decimalPad)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                }
-                .padding()
-                
-                // Remaining balance display
-                HStack {
-                    Text("Remaining Balance:")
-                    Spacer()
-                    Text("\(viewModel.remainingBalance(for: selectedCurrency), specifier: "%.2f") \(selectedCurrency.rawValue)")
-                }
-                .padding()
-                
-                // List of expenses for the selected currency
-                List {
-                    ForEach(viewModel.expenses.filter { $0.currency == selectedCurrency }) { expense in
-                        VStack(alignment: .leading) {
-                            HStack {
-                                Image(systemName: "creditcard") // SF Symbol icon
-                                Text(expense.description)
-                            }
-                            Text("Amount: \(expense.amount, specifier: "%.2f") \(selectedCurrency.rawValue)")
+                ScrollView {
+                    VStack(spacing: 16) {
+                        // Currency Picker
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Select Currency")
                                 .font(.subheadline)
                                 .foregroundColor(.secondary)
-                            Text(expense.date, style: .date)
-                                .font(.caption)
-                                .foregroundColor(.gray)
+                                .padding(.horizontal)
+                            
+                            Picker("Currency", selection: $selectedCurrency) {
+                                Text("SGD").tag(Currency.SGD)
+                                Text("IDR").tag(Currency.IDR)
+                            }
+                            .pickerStyle(SegmentedPickerStyle())
+                            .padding(.horizontal)
                         }
+                        
+                        // Base Amount Card
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Base Amount")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                                .padding(.horizontal)
+                            
+                            HStack {
+                                TextField("Enter amount", text: $baseAmountInput)
+                                    .keyboardType(.decimalPad)
+                                    .padding()
+                                    .background(Color(.systemBackground))
+                                    .cornerRadius(10)
+                                    .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+                                    .focused($isBaseAmountFocused)
+                                
+                                Text(selectedCurrency.rawValue)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.primary)
+                                    .padding(.trailing, 8)
+                            }
+                            .padding(.horizontal)
+                        }
+                        
+                        // Balance Card
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Remaining Balance")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                            
+                            HStack {
+                                Text("\(viewModel.remainingBalance(for: selectedCurrency), specifier: "%.2f")")
+                                    .font(.system(size: 32, weight: .bold, design: .rounded))
+                                
+                                Text(selectedCurrency.rawValue)
+                                    .font(.headline)
+                                    .foregroundColor(.secondary)
+                            }
+                            
+                            // Progress bar
+                            let ratio = calculateRatio()
+                            GeometryReader { geometry in
+                                ZStack(alignment: .leading) {
+                                    RoundedRectangle(cornerRadius: 4)
+                                        .fill(Color.gray.opacity(0.2))
+                                        .frame(height: 8)
+                                    
+                                    RoundedRectangle(cornerRadius: 4)
+                                        .fill(progressColor(ratio: ratio))
+                                        .frame(width: geometry.size.width * CGFloat(ratio), height: 8)
+                                }
+                            }
+                            .frame(height: 8)
+                        }
+                        .padding()
+                        .background(Color(.systemBackground))
+                        .cornerRadius(16)
+                        .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
+                        .padding(.horizontal)
+                        
+                        // Expenses List
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Recent Expenses")
+                                .font(.headline)
+                                .padding(.horizontal)
+                            
+                            if viewModel.expenses.filter({ $0.currency == selectedCurrency }).isEmpty {
+                                VStack(spacing: 12) {
+                                    Image(systemName: "creditcard.fill")
+                                        .font(.system(size: 40))
+                                        .foregroundColor(.secondary.opacity(0.5))
+                                    Text("No expenses yet")
+                                        .font(.subheadline)
+                                        .foregroundColor(.secondary)
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 30)
+                            } else {
+                                LazyVStack(spacing: 12) {
+                                    ForEach(viewModel.expenses.filter { $0.currency == selectedCurrency }) { expense in
+                                        HStack(spacing: 16) {
+                                            Circle()
+                                                .fill(Color.blue.opacity(0.1))
+                                                .frame(width: 44, height: 44)
+                                                .overlay(
+                                                    Image(systemName: "creditcard")
+                                                        .foregroundColor(.blue)
+                                                )
+                                            
+                                            VStack(alignment: .leading, spacing: 4) {
+                                                Text(expense.description)
+                                                    .font(.headline)
+                                                
+                                                Text(expense.date, style: .date)
+                                                    .font(.caption)
+                                                    .foregroundColor(.secondary)
+                                            }
+                                            
+                                            Spacer()
+                                            
+                                            Text("-\(expense.amount, specifier: "%.2f")")
+                                                .font(.system(.headline, design: .rounded))
+                                                .foregroundColor(.red)
+                                        }
+                                        .padding()
+                                        .background(Color(.systemBackground))
+                                        .cornerRadius(12)
+                                        .shadow(color: Color.black.opacity(0.03), radius: 3, x: 0, y: 1)
+                                    }
+                                }
+                                .padding(.horizontal)
+                            }
+                        }
+                        .frame(maxHeight: .infinity)
+                    
+                        // Add Expense Section
+                        VStack(spacing: 12) {
+                            HStack {
+                                TextField("Amount", text: $amountInput)
+                                    .keyboardType(.decimalPad)
+                                    .padding()
+                                    .background(Color(.systemBackground))
+                                    .cornerRadius(10)
+                                    .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+                                    .focused($isAmountFocused)
+                                
+                                Text(selectedCurrency.rawValue)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.primary)
+                            }
+                            .padding(.horizontal)
+                            
+                            TextField("Description", text: $descriptionInput)
+                                .padding()
+                                .background(Color(.systemBackground))
+                                .cornerRadius(10)
+                                .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+                                .padding(.horizontal)
+                                .focused($isDescriptionFocused)
+                            
+                            HStack(spacing: 20) {
+                                Button(action: {
+                                    showReceiptScanner = true
+                                }) {
+                                    VStack {
+                                        Image(systemName: "camera.fill")
+                                            .font(.system(size: 20))
+                                            .foregroundColor(.white)
+                                            .frame(width: 50, height: 50)
+                                            .background(Color.blue)
+                                            .clipShape(Circle())
+                                        
+                                        Text("Scan")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
+                                
+                                Button(action: {
+                                    // Update base amount if provided
+                                    if let base = Double(baseAmountInput) {
+                                        if selectedCurrency == .SGD {
+                                            viewModel.baseAmountSGD = base
+                                            viewModel.baseAmountIDR = viewModel.convertedAmount(sgdAmount: base)
+                                        } else {
+                                            viewModel.baseAmountIDR = base
+                                        }
+                                    }
+                                    
+                                    // Add expense if amount and description are valid
+                                    if let amount = Double(amountInput), !descriptionInput.isEmpty {
+                                        viewModel.addExpense(amount: amount, description: descriptionInput, currency: selectedCurrency)
+                                        amountInput = ""
+                                        descriptionInput = ""
+                                        isAmountFocused = false
+                                        isDescriptionFocused = false
+                                    }
+                                }) {
+                                    Text("Add Expense")
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(.white)
+                                        .frame(maxWidth: .infinity)
+                                        .padding()
+                                        .background(
+                                            LinearGradient(
+                                                gradient: Gradient(colors: [Color.blue, Color.blue.opacity(0.8)]),
+                                                startPoint: .leading,
+                                                endPoint: .trailing
+                                            )
+                                        )
+                                        .cornerRadius(12)
+                                        .shadow(color: Color.blue.opacity(0.3), radius: 5, x: 0, y: 3)
+                                }
+                                
+                                Button(action: {
+                                    showVoiceInput = true
+                                }) {
+                                    VStack {
+                                        Image(systemName: "mic.fill")
+                                            .font(.system(size: 20))
+                                            .foregroundColor(.white)
+                                            .frame(width: 50, height: 50)
+                                            .background(Color.blue)
+                                            .clipShape(Circle())
+                                        
+                                        Text("Voice")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
+                            }
+                            .padding(.horizontal)
+                            .padding(.top, 8)
+                        }
+                        .padding(.vertical)
+                        .background(Color(.systemBackground).opacity(0.95))
+                        .cornerRadius(24, corners: [.topLeft, .topRight])
+                        .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: -5)
+                        
+                        // Add extra padding at the bottom to ensure content is visible above keyboard
+                        Spacer()
+                            .frame(height: 300)
                     }
+                    .padding(.top)
                 }
                 
-                // New expense input area
-                VStack {
-                    TextField("Expense Amount", text: $amountInput)
-                        .keyboardType(.decimalPad)
-                        .textFieldStyle(RoundedBorderTextFieldStyle())
-                        .padding(.horizontal)
-                    TextField("Description", text: $descriptionInput)
-                        .textFieldStyle(RoundedBorderTextFieldStyle())
-                        .padding(.horizontal)
-                    
-                    HStack {
-                        
-                        Button(action: {
-                            // Present receipt scanner
-                            showReceiptScanner = true
-                        }) {
-                            Image(systemName: "camera")
-                                .font(.title)
-                        }
-                        
+                // Floating Add Button (visible when keyboard is shown)
+                if isAmountFocused || isDescriptionFocused || isBaseAmountFocused {
+                    VStack {
                         Spacer()
-
                         
-                        Button(action: {
-                            // Add expense manually
-                            if let amount = Double(amountInput), !descriptionInput.isEmpty {
-                                viewModel.addExpense(amount: amount, description: descriptionInput, currency: selectedCurrency)
-                                amountInput = ""
-                                descriptionInput = ""
+                        HStack {
+                            Spacer()
+                            
+                            Button(action: {
+                                // Update base amount if provided
+                                if let base = Double(baseAmountInput) {
+                                    if selectedCurrency == .SGD {
+                                        viewModel.baseAmountSGD = base
+                                        viewModel.baseAmountIDR = viewModel.convertedAmount(sgdAmount: base)
+                                    } else {
+                                        viewModel.baseAmountIDR = base
+                                    }
+                                }
+                                
+                                // Add expense if valid
+                                if let amount = Double(amountInput), !descriptionInput.isEmpty {
+                                    viewModel.addExpense(amount: amount, description: descriptionInput, currency: selectedCurrency)
+                                    amountInput = ""
+                                    descriptionInput = ""
+                                    isAmountFocused = false
+                                    isDescriptionFocused = false
+                                    isBaseAmountFocused = false
+                                }
+                            }) {
+                                HStack {
+                                    Image(systemName: "plus")
+                                    Text("Add")
+                                }
+                                .padding()
+                                .background(Color.blue)
+                                .foregroundColor(.white)
+                                .cornerRadius(30)
+                                .shadow(radius: 5)
                             }
-                        }) {
-                            Text("Add Expense")
+                            .padding()
                         }
-                        
-                        
-                        
-                        Spacer()
-                        
-                        Button(action: {
-                            // Present voice input view
-                            showVoiceInput = true
-                        }) {
-                            Image(systemName: "mic")
-                                .font(.title)
-                        }
+                        .padding(.bottom, 10)
                     }
-                    .padding()
                 }
             }
             .navigationTitle("IndoSpend")
-            .background(backgroundColor().ignoresSafeArea())
-            // Present the receipt scanner as a sheet
+            .toolbar {
+                ToolbarItem(placement: .keyboard) {
+                    HStack {
+                        Spacer()
+                        Button("Done") {
+                            isBaseAmountFocused = false
+                            isAmountFocused = false
+                            isDescriptionFocused = false
+                        }
+                    }
+                }
+            }
             .sheet(isPresented: $showReceiptScanner) {
                 ReceiptScannerView { recognizedAmount, recognizedDescription in
                     viewModel.addExpense(amount: recognizedAmount, description: recognizedDescription, currency: selectedCurrency)
                 }
             }
-            // Present the voice input view as a sheet
             .sheet(isPresented: $showVoiceInput) {
                 VoiceInputView { spokenAmount, spokenDescription in
                     viewModel.addExpense(amount: spokenAmount, description: spokenDescription, currency: selectedCurrency)
@@ -132,19 +335,52 @@ struct ContentView: View {
         }
     }
     
-    // Adjusts the background color based on how much balance is left
-    func backgroundColor() -> Color {
+    // Calculate ratio for progress bar
+    private func calculateRatio() -> Double {
         let remaining = viewModel.remainingBalance(for: selectedCurrency)
         let base: Double = (selectedCurrency == .SGD ? viewModel.baseAmountSGD : viewModel.baseAmountIDR)
-        let ratio = base > 0 ? remaining / base : 1.0
+        return base > 0 ? min(max(remaining / base, 0), 1) : 1.0
+    }
+    
+    // Color for progress bar
+    private func progressColor(ratio: Double) -> Color {
+        if ratio > 0.5 {
+            return Color.green
+        } else if ratio > 0.2 {
+            return Color.yellow
+        } else {
+            return Color.red
+        }
+    }
+    
+    // Background color based on remaining balance
+    func backgroundColor() -> Color {
+        let ratio = calculateRatio()
         
         if ratio > 0.5 {
-            return Color.green.opacity(0.2)
+            return Color.green.opacity(0.1)
         } else if ratio > 0.2 {
-            return Color.yellow.opacity(0.2)
+            return Color.yellow.opacity(0.1)
         } else {
-            return Color.red.opacity(0.2)
+            return Color.red.opacity(0.1)
         }
+    }
+}
+
+// Extension to create rounded corners for specific corners
+extension View {
+    func cornerRadius(_ radius: CGFloat, corners: UIRectCorner) -> some View {
+        clipShape(RoundedCorner(radius: radius, corners: corners))
+    }
+}
+
+struct RoundedCorner: Shape {
+    var radius: CGFloat = .infinity
+    var corners: UIRectCorner = .allCorners
+
+    func path(in rect: CGRect) -> Path {
+        let path = UIBezierPath(roundedRect: rect, byRoundingCorners: corners, cornerRadii: CGSize(width: radius, height: radius))
+        return Path(path.cgPath)
     }
 }
 
