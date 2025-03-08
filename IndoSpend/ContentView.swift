@@ -1,7 +1,12 @@
 import SwiftUI
+import SwiftData
 
 struct ContentView: View {
+    @Environment(\.modelContext) private var modelContext
     @StateObject var viewModel = ExpenseViewModel()
+    // Use @Query to fetch expenses dynamically from SwiftData.
+    @Query(sort: [SortDescriptor(\Expense.date, order: .reverse)]) private var expenses: [Expense]
+    
     @State private var selectedCurrency: Currency = .SGD
     
     // Separate state variables for base amounts
@@ -86,7 +91,7 @@ struct ContentView: View {
                                 .foregroundColor(.secondary)
                             
                             HStack {
-                                Text("\(viewModel.remainingBalance(for: selectedCurrency), specifier: "%.2f")")
+                                Text("\(remainingBalance, specifier: "%.2f")")
                                     .font(.system(size: 32, weight: .bold, design: .rounded))
                                 
                                 Text(selectedCurrency.rawValue)
@@ -120,7 +125,9 @@ struct ContentView: View {
                                 .font(.headline)
                                 .padding(.horizontal)
                             
-                            if viewModel.expenses.filter({ $0.currency == selectedCurrency }).isEmpty {
+                            let filteredExpenses = expenses.filter { $0.currency == selectedCurrency }
+                            
+                            if filteredExpenses.isEmpty {
                                 VStack(spacing: 12) {
                                     Image(systemName: "creditcard.fill")
                                         .font(.system(size: 40))
@@ -133,7 +140,7 @@ struct ContentView: View {
                                 .padding(.vertical, 30)
                             } else {
                                 LazyVStack(spacing: 12) {
-                                    ForEach(viewModel.expenses.filter { $0.currency == selectedCurrency }) { expense in
+                                    ForEach(filteredExpenses) { expense in
                                         HStack(spacing: 16) {
                                             Circle()
                                                 .fill(Color.blue.opacity(0.1))
@@ -144,7 +151,7 @@ struct ContentView: View {
                                                 )
                                             
                                             VStack(alignment: .leading, spacing: 4) {
-                                                Text(expense.description)
+                                                Text(expense.expenseDescription)
                                                     .font(.headline)
                                                 Text(expense.date, style: .date)
                                                     .font(.caption)
@@ -162,7 +169,6 @@ struct ContentView: View {
                                         .cornerRadius(12)
                                         .shadow(color: Color.black.opacity(0.03), radius: 3, x: 0, y: 1)
                                         .onTapGesture {
-                                            // Set the tapped expense to trigger the sheet.
                                             expenseToEdit = expense
                                         }
                                     }
@@ -227,7 +233,7 @@ struct ContentView: View {
                                     }
                                     
                                     if let amount = Double(amountInput), !descriptionInput.isEmpty {
-                                        viewModel.addExpense(amount: amount, description: descriptionInput, currency: selectedCurrency)
+                                        viewModel.addExpense(amount: amount, expenseDescription: descriptionInput, currency: selectedCurrency)
                                         amountInput = ""
                                         descriptionInput = ""
                                         isAmountFocused = false
@@ -301,7 +307,7 @@ struct ContentView: View {
                                 }
                                 
                                 if let amount = Double(amountInput), !descriptionInput.isEmpty {
-                                    viewModel.addExpense(amount: amount, description: descriptionInput, currency: selectedCurrency)
+                                    viewModel.addExpense(amount: amount, expenseDescription: descriptionInput, currency: selectedCurrency)
                                     amountInput = ""
                                     descriptionInput = ""
                                     isAmountFocused = false
@@ -340,19 +346,19 @@ struct ContentView: View {
             }
             .sheet(isPresented: $showReceiptScanner) {
                 ReceiptScannerView { recognizedAmount, recognizedDescription in
-                    viewModel.addExpense(amount: recognizedAmount, description: recognizedDescription, currency: selectedCurrency)
+                    viewModel.addExpense(amount: recognizedAmount, expenseDescription: recognizedDescription, currency: selectedCurrency)
                 }
             }
             .sheet(isPresented: $showVoiceInput) {
                 VoiceInputView { spokenAmount, spokenDescription in
-                    viewModel.addExpense(amount: spokenAmount, description: spokenDescription, currency: selectedCurrency)
+                    viewModel.addExpense(amount: spokenAmount, expenseDescription: spokenDescription, currency: selectedCurrency)
                 }
             }
             // Use the item-based sheet: the sheet is only presented when expenseToEdit is non-nil.
             .sheet(item: $expenseToEdit) { expense in
                 ExpenseEditView(expense: expense,
-                                onSave: { newAmount, newDescription in
-                                    viewModel.updateExpense(expense: expense, newAmount: newAmount, newDescription: newDescription)
+                                onSave: { newAmount, newExpenseDescription in
+                                    viewModel.updateExpense(expense: expense, newAmount: newAmount, newExpenseDescription: newExpenseDescription)
                                     expenseToEdit = nil
                                 },
                                 onDelete: {
@@ -361,12 +367,25 @@ struct ContentView: View {
                                 })
             }
         }
+        .onAppear {
+            viewModel.setContext(modelContext)
+        }
+    }
+    
+    // Calculate remaining balance using the dynamically updating expenses.
+    private var remainingBalance: Double {
+        let base = selectedCurrency == .SGD ? viewModel.baseAmountSGD : viewModel.baseAmountIDR
+        let spent = totalSpent(currency: selectedCurrency)
+        return base - spent
+    }
+    
+    private func totalSpent(currency: Currency) -> Double {
+        expenses.filter { $0.currency == currency }.reduce(0) { $0 + $1.amount }
     }
     
     private func calculateRatio() -> Double {
-        let remaining = viewModel.remainingBalance(for: selectedCurrency)
-        let base: Double = (selectedCurrency == .SGD ? viewModel.baseAmountSGD : viewModel.baseAmountIDR)
-        return base > 0 ? min(max(remaining / base, 0), 1) : 1.0
+        let base = selectedCurrency == .SGD ? viewModel.baseAmountSGD : viewModel.baseAmountIDR
+        return base > 0 ? min(max(remainingBalance / base, 0), 1) : 1.0
     }
     
     private func progressColor(ratio: Double) -> Color {

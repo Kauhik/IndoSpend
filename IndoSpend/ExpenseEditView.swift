@@ -3,7 +3,7 @@ import SwiftUI
 struct ExpenseEditView: View {
     @Environment(\.presentationMode) var presentationMode
     @State var amount: String
-    @State var description: String
+    @State var expenseDescription: String
     let expense: Expense
     let onSave: (Double, String) -> Void
     let onDelete: () -> Void
@@ -13,7 +13,7 @@ struct ExpenseEditView: View {
         self.onSave = onSave
         self.onDelete = onDelete
         _amount = State(initialValue: String(expense.amount))
-        _description = State(initialValue: expense.description)
+        _expenseDescription = State(initialValue: expense.expenseDescription)
     }
 
     var body: some View {
@@ -24,7 +24,7 @@ struct ExpenseEditView: View {
                         .keyboardType(.decimalPad)
                 }
                 Section(header: Text("Description")) {
-                    TextField("Description", text: $description)
+                    TextField("Description", text: $expenseDescription)
                 }
                 Section {
                     Button("Delete Expense") {
@@ -39,7 +39,7 @@ struct ExpenseEditView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
                         if let newAmount = Double(amount) {
-                            onSave(newAmount, description)
+                            onSave(newAmount, expenseDescription)
                             presentationMode.wrappedValue.dismiss()
                         }
                     }
@@ -57,7 +57,7 @@ struct ExpenseEditView: View {
 
 struct ExpenseEditView_Previews: PreviewProvider {
     static var previews: some View {
-        ExpenseEditView(expense: Expense(amount: 10.0, description: "Sample", currency: .SGD),
+        ExpenseEditView(expense: Expense(amount: 10.0, expenseDescription: "Sample", currency: .SGD),
                         onSave: { _, _ in },
                         onDelete: {})
     }

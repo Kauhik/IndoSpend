@@ -1,21 +1,11 @@
-//
-//  IndoSpendApp.swift
-//  IndoSpend
-//
-//  Created by Kaushik Manian on 7/3/25.
-//
-
 import SwiftUI
 import SwiftData
 
 @main
 struct IndoSpendApp: App {
     var sharedModelContainer: ModelContainer = {
-        let schema = Schema([
-            Item.self,
-        ])
+        let schema = Schema([Expense.self, Item.self])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
-
         do {
             return try ModelContainer(for: schema, configurations: [modelConfiguration])
         } catch {
