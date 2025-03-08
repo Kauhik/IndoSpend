@@ -3,13 +3,17 @@ import SwiftUI
 struct ContentView: View {
     @StateObject var viewModel = ExpenseViewModel()
     @State private var selectedCurrency: Currency = .SGD
+    
+    // Separate state variables for base amounts
+    @State private var baseAmountSGDInput: String = ""
+    @State private var baseAmountIDRInput: String = ""
+    
+    // Expense input fields
     @State private var amountInput: String = ""
     @State private var descriptionInput: String = ""
-    @State private var baseAmountInput: String = ""
     
     @State private var showReceiptScanner = false
     @State private var showVoiceInput = false
-    @State private var keyboardHeight: CGFloat = 0
     
     @FocusState private var isBaseAmountFocused: Bool
     @FocusState private var isAmountFocused: Bool
@@ -38,7 +42,7 @@ struct ContentView: View {
                             .padding(.horizontal)
                         }
                         
-                        // Base Amount Card
+                        // Base Amount Card (shows input field for the selected currency)
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Base Amount")
                                 .font(.subheadline)
@@ -46,13 +50,23 @@ struct ContentView: View {
                                 .padding(.horizontal)
                             
                             HStack {
-                                TextField("Enter amount", text: $baseAmountInput)
-                                    .keyboardType(.decimalPad)
-                                    .padding()
-                                    .background(Color(.systemBackground))
-                                    .cornerRadius(10)
-                                    .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
-                                    .focused($isBaseAmountFocused)
+                                if selectedCurrency == .SGD {
+                                    TextField("Enter amount", text: $baseAmountSGDInput)
+                                        .keyboardType(.decimalPad)
+                                        .padding()
+                                        .background(Color(.systemBackground))
+                                        .cornerRadius(10)
+                                        .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+                                        .focused($isBaseAmountFocused)
+                                } else {
+                                    TextField("Enter amount", text: $baseAmountIDRInput)
+                                        .keyboardType(.decimalPad)
+                                        .padding()
+                                        .background(Color(.systemBackground))
+                                        .cornerRadius(10)
+                                        .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+                                        .focused($isBaseAmountFocused)
+                                }
                                 
                                 Text(selectedCurrency.rawValue)
                                     .fontWeight(.semibold)
@@ -197,12 +211,13 @@ struct ContentView: View {
                                 }
                                 
                                 Button(action: {
-                                    // Update base amount if provided
-                                    if let base = Double(baseAmountInput) {
-                                        if selectedCurrency == .SGD {
+                                    // Update base amount for the current currency without linking
+                                    if selectedCurrency == .SGD {
+                                        if let base = Double(baseAmountSGDInput) {
                                             viewModel.baseAmountSGD = base
-                                            viewModel.baseAmountIDR = viewModel.convertedAmount(sgdAmount: base)
-                                        } else {
+                                        }
+                                    } else {
+                                        if let base = Double(baseAmountIDRInput) {
                                             viewModel.baseAmountIDR = base
                                         }
                                     }
@@ -264,8 +279,8 @@ struct ContentView: View {
                     .padding(.top)
                 }
                 
-                // Floating Add Button (visible when keyboard is shown)
-                if isAmountFocused || isDescriptionFocused || isBaseAmountFocused {
+                // Floating Add Button (visible when any text field is focused)
+                if isBaseAmountFocused || isAmountFocused || isDescriptionFocused {
                     VStack {
                         Spacer()
                         
@@ -273,12 +288,13 @@ struct ContentView: View {
                             Spacer()
                             
                             Button(action: {
-                                // Update base amount if provided
-                                if let base = Double(baseAmountInput) {
-                                    if selectedCurrency == .SGD {
+                                // Update base amount for the current currency without linking
+                                if selectedCurrency == .SGD {
+                                    if let base = Double(baseAmountSGDInput) {
                                         viewModel.baseAmountSGD = base
-                                        viewModel.baseAmountIDR = viewModel.convertedAmount(sgdAmount: base)
-                                    } else {
+                                    }
+                                } else {
+                                    if let base = Double(baseAmountIDRInput) {
                                         viewModel.baseAmountIDR = base
                                     }
                                 }
@@ -335,7 +351,7 @@ struct ContentView: View {
         }
     }
     
-    // Calculate ratio for progress bar
+    // Calculate ratio for progress bar based on the selected currency's base amount
     private func calculateRatio() -> Double {
         let remaining = viewModel.remainingBalance(for: selectedCurrency)
         let base: Double = (selectedCurrency == .SGD ? viewModel.baseAmountSGD : viewModel.baseAmountIDR)
@@ -356,7 +372,6 @@ struct ContentView: View {
     // Background color based on remaining balance
     func backgroundColor() -> Color {
         let ratio = calculateRatio()
-        
         if ratio > 0.5 {
             return Color.green.opacity(0.1)
         } else if ratio > 0.2 {
@@ -379,7 +394,8 @@ struct RoundedCorner: Shape {
     var corners: UIRectCorner = .allCorners
 
     func path(in rect: CGRect) -> Path {
-        let path = UIBezierPath(roundedRect: rect, byRoundingCorners: corners, cornerRadii: CGSize(width: radius, height: radius))
+        let path = UIBezierPath(roundedRect: rect, byRoundingCorners: corners,
+                                cornerRadii: CGSize(width: radius, height: radius))
         return Path(path.cgPath)
     }
 }
