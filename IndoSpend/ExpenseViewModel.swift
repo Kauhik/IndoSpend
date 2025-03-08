@@ -12,7 +12,17 @@ class ExpenseViewModel: ObservableObject {
     func addExpense(amount: Double, description: String, currency: Currency) {
         let expense = Expense(amount: amount, description: description, currency: currency)
         expenses.append(expense)
-        // Persist the expense if needed (e.g., save to file or Core Data)
+    }
+    
+    func updateExpense(expense: Expense, newAmount: Double, newDescription: String) {
+        if let index = expenses.firstIndex(where: { $0.id == expense.id }) {
+            expenses[index].amount = newAmount
+            expenses[index].description = newDescription
+        }
+    }
+    
+    func deleteExpense(expense: Expense) {
+        expenses.removeAll { $0.id == expense.id }
     }
     
     func totalSpent(currency: Currency) -> Double {

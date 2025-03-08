@@ -19,6 +19,9 @@ struct ContentView: View {
     @FocusState private var isAmountFocused: Bool
     @FocusState private var isDescriptionFocused: Bool
 
+    // Bind the selected expense for editing using the .sheet(item:) modifier.
+    @State private var expenseToEdit: Expense? = nil
+    
     var body: some View {
         NavigationView {
             ZStack {
@@ -42,7 +45,7 @@ struct ContentView: View {
                             .padding(.horizontal)
                         }
                         
-                        // Base Amount Card (shows input field for the selected currency)
+                        // Base Amount Card
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Base Amount")
                                 .font(.subheadline)
@@ -91,7 +94,6 @@ struct ContentView: View {
                                     .foregroundColor(.secondary)
                             }
                             
-                            // Progress bar
                             let ratio = calculateRatio()
                             GeometryReader { geometry in
                                 ZStack(alignment: .leading) {
@@ -144,7 +146,6 @@ struct ContentView: View {
                                             VStack(alignment: .leading, spacing: 4) {
                                                 Text(expense.description)
                                                     .font(.headline)
-                                                
                                                 Text(expense.date, style: .date)
                                                     .font(.caption)
                                                     .foregroundColor(.secondary)
@@ -160,13 +161,17 @@ struct ContentView: View {
                                         .background(Color(.systemBackground))
                                         .cornerRadius(12)
                                         .shadow(color: Color.black.opacity(0.03), radius: 3, x: 0, y: 1)
+                                        .onTapGesture {
+                                            // Set the tapped expense to trigger the sheet.
+                                            expenseToEdit = expense
+                                        }
                                     }
                                 }
                                 .padding(.horizontal)
                             }
                         }
                         .frame(maxHeight: .infinity)
-                    
+                        
                         // Add Expense Section
                         VStack(spacing: 12) {
                             HStack {
@@ -211,7 +216,6 @@ struct ContentView: View {
                                 }
                                 
                                 Button(action: {
-                                    // Update base amount for the current currency without linking
                                     if selectedCurrency == .SGD {
                                         if let base = Double(baseAmountSGDInput) {
                                             viewModel.baseAmountSGD = base
@@ -222,7 +226,6 @@ struct ContentView: View {
                                         }
                                     }
                                     
-                                    // Add expense if amount and description are valid
                                     if let amount = Double(amountInput), !descriptionInput.isEmpty {
                                         viewModel.addExpense(amount: amount, description: descriptionInput, currency: selectedCurrency)
                                         amountInput = ""
@@ -272,7 +275,6 @@ struct ContentView: View {
                         .cornerRadius(24, corners: [.topLeft, .topRight])
                         .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: -5)
                         
-                        // Add extra padding at the bottom to ensure content is visible above keyboard
                         Spacer()
                             .frame(height: 300)
                     }
@@ -288,7 +290,6 @@ struct ContentView: View {
                             Spacer()
                             
                             Button(action: {
-                                // Update base amount for the current currency without linking
                                 if selectedCurrency == .SGD {
                                     if let base = Double(baseAmountSGDInput) {
                                         viewModel.baseAmountSGD = base
@@ -299,7 +300,6 @@ struct ContentView: View {
                                     }
                                 }
                                 
-                                // Add expense if valid
                                 if let amount = Double(amountInput), !descriptionInput.isEmpty {
                                     viewModel.addExpense(amount: amount, description: descriptionInput, currency: selectedCurrency)
                                     amountInput = ""
@@ -348,17 +348,27 @@ struct ContentView: View {
                     viewModel.addExpense(amount: spokenAmount, description: spokenDescription, currency: selectedCurrency)
                 }
             }
+            // Use the item-based sheet: the sheet is only presented when expenseToEdit is non-nil.
+            .sheet(item: $expenseToEdit) { expense in
+                ExpenseEditView(expense: expense,
+                                onSave: { newAmount, newDescription in
+                                    viewModel.updateExpense(expense: expense, newAmount: newAmount, newDescription: newDescription)
+                                    expenseToEdit = nil
+                                },
+                                onDelete: {
+                                    viewModel.deleteExpense(expense: expense)
+                                    expenseToEdit = nil
+                                })
+            }
         }
     }
     
-    // Calculate ratio for progress bar based on the selected currency's base amount
     private func calculateRatio() -> Double {
         let remaining = viewModel.remainingBalance(for: selectedCurrency)
         let base: Double = (selectedCurrency == .SGD ? viewModel.baseAmountSGD : viewModel.baseAmountIDR)
         return base > 0 ? min(max(remaining / base, 0), 1) : 1.0
     }
     
-    // Color for progress bar
     private func progressColor(ratio: Double) -> Color {
         if ratio > 0.5 {
             return Color.green
@@ -369,7 +379,6 @@ struct ContentView: View {
         }
     }
     
-    // Background color based on remaining balance
     func backgroundColor() -> Color {
         let ratio = calculateRatio()
         if ratio > 0.5 {
@@ -382,7 +391,6 @@ struct ContentView: View {
     }
 }
 
-// Extension to create rounded corners for specific corners
 extension View {
     func cornerRadius(_ radius: CGFloat, corners: UIRectCorner) -> some View {
         clipShape(RoundedCorner(radius: radius, corners: corners))
@@ -392,7 +400,7 @@ extension View {
 struct RoundedCorner: Shape {
     var radius: CGFloat = .infinity
     var corners: UIRectCorner = .allCorners
-
+    
     func path(in rect: CGRect) -> Path {
         let path = UIBezierPath(roundedRect: rect, byRoundingCorners: corners,
                                 cornerRadii: CGSize(width: radius, height: radius))
