@@ -38,11 +38,7 @@ struct VoiceInputView: View {
             .padding()
             
             Button("Done") {
-                // Naively parse the transcript:
-                // Expecting format: "<amount> <description...>"
-                let components = transcript.components(separatedBy: " ")
-                let amount = Double(components.first ?? "") ?? 0.0
-                let description = components.dropFirst().joined(separator: " ")
+                let (amount, description) = parseTranscript(transcript)
                 completion(amount, description)
                 presentationMode.wrappedValue.dismiss()
             }
@@ -106,5 +102,32 @@ struct VoiceInputView: View {
                 print("Speech recognition not authorized")
             }
         }
+    }
+    
+    // Helper function to parse the transcript into an amount and a description.
+    // This expects the transcript to begin with a number (which can include commas or spaces)
+    // followed by the rest of the description.
+    func parseTranscript(_ transcript: String) -> (Double, String) {
+        let pattern = #"^([\d,\.\s]+)(.*)$"#
+        do {
+            let regex = try NSRegularExpression(pattern: pattern)
+            let nsTranscript = transcript as NSString
+            if let match = regex.firstMatch(in: transcript, range: NSRange(location: 0, length: nsTranscript.length)),
+               match.numberOfRanges >= 3 {
+                let amountString = nsTranscript.substring(with: match.range(at: 1))
+                let descriptionString = nsTranscript.substring(with: match.range(at: 2)).trimmingCharacters(in: .whitespaces)
+                // Remove commas and spaces to normalize the number
+                let cleanedAmount = amountString.replacingOccurrences(of: "[,\\s]", with: "", options: .regularExpression)
+                let amount = Double(cleanedAmount) ?? 0.0
+                return (amount, descriptionString)
+            }
+        } catch {
+            print("Regex error: \(error.localizedDescription)")
+        }
+        // Fallback in case regex fails: split by spaces
+        let components = transcript.components(separatedBy: " ")
+        let amount = Double(components.first ?? "") ?? 0.0
+        let description = components.dropFirst().joined(separator: " ")
+        return (amount, description)
     }
 }
