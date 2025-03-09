@@ -3,8 +3,7 @@ import SwiftData
 import SwiftUI
 
 class ExpenseViewModel: ObservableObject {
-    @Published var baseAmountSGD: Double = 0.0
-    @Published var baseAmountIDR: Double = 0.0
+    // If you had a conversion rate or other logic, keep it here.
     @Published var conversionRate: Double = 10500.0
 
     private var modelContext: ModelContext?
@@ -13,6 +12,7 @@ class ExpenseViewModel: ObservableObject {
         self.modelContext = context
     }
 
+    // MARK: - Expense CRUD
     func addExpense(amount: Double, expenseDescription: String, currency: Currency) {
         guard let context = modelContext else { return }
         let expense = Expense(amount: amount, expenseDescription: expenseDescription, currency: currency)

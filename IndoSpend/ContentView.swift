@@ -4,12 +4,17 @@ import SwiftData
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @StateObject var viewModel = ExpenseViewModel()
-    // Use @Query to fetch expenses dynamically from SwiftData.
-    @Query(sort: [SortDescriptor(\Expense.date, order: .reverse)]) private var expenses: [Expense]
+
+    // Expenses query
+    @Query(sort: [SortDescriptor(\Expense.date, order: .reverse)])
+    private var expenses: [Expense]
+    
+    // BaseAmount query (no #Predicate)
+    @Query private var baseAmounts: [BaseAmount]
     
     @State private var selectedCurrency: Currency = .SGD
     
-    // Separate state variables for base amounts
+    // User-entered text fields for base amounts
     @State private var baseAmountSGDInput: String = ""
     @State private var baseAmountIDRInput: String = ""
     
@@ -24,7 +29,7 @@ struct ContentView: View {
     @FocusState private var isAmountFocused: Bool
     @FocusState private var isDescriptionFocused: Bool
 
-    // Bind the selected expense for editing using the .sheet(item:) modifier.
+    // Expense editing
     @State private var expenseToEdit: Expense? = nil
     
     var body: some View {
@@ -221,7 +226,6 @@ struct ContentView: View {
                                     }
                                 }
                                 
-                                // Replace the Add Expense button with a NavigationLink to the chart view.
                                 NavigationLink(destination: SpendingChartView(selectedCurrency: selectedCurrency)) {
                                     Text("View Chart")
                                         .fontWeight(.semibold)
@@ -279,24 +283,32 @@ struct ContentView: View {
                             Spacer()
                             
                             Button(action: {
+                                // 1) Update/persist the base amount for the selected currency
                                 if selectedCurrency == .SGD {
                                     if let base = Double(baseAmountSGDInput) {
-                                        viewModel.baseAmountSGD = base
+                                        updateBaseAmount(currency: .SGD, amount: base)
                                     }
                                 } else {
                                     if let base = Double(baseAmountIDRInput) {
-                                        viewModel.baseAmountIDR = base
+                                        updateBaseAmount(currency: .IDR, amount: base)
                                     }
                                 }
                                 
+                                // 2) Add expense if inputs are provided
                                 if let amount = Double(amountInput), !descriptionInput.isEmpty {
-                                    viewModel.addExpense(amount: amount, expenseDescription: descriptionInput, currency: selectedCurrency)
+                                    viewModel.addExpense(
+                                        amount: amount,
+                                        expenseDescription: descriptionInput,
+                                        currency: selectedCurrency
+                                    )
                                     amountInput = ""
                                     descriptionInput = ""
-                                    isAmountFocused = false
-                                    isDescriptionFocused = false
-                                    isBaseAmountFocused = false
                                 }
+                                
+                                // 3) Dismiss keyboards
+                                isBaseAmountFocused = false
+                                isAmountFocused = false
+                                isDescriptionFocused = false
                             }) {
                                 HStack {
                                     Image(systemName: "plus")
@@ -329,35 +341,73 @@ struct ContentView: View {
             }
             .sheet(isPresented: $showReceiptScanner) {
                 ReceiptScannerView { recognizedAmount, recognizedDescription in
-                    viewModel.addExpense(amount: recognizedAmount, expenseDescription: recognizedDescription, currency: selectedCurrency)
+                    viewModel.addExpense(amount: recognizedAmount,
+                                         expenseDescription: recognizedDescription,
+                                         currency: selectedCurrency)
                 }
             }
             .sheet(isPresented: $showVoiceInput) {
                 VoiceInputView { spokenAmount, spokenDescription in
-                    viewModel.addExpense(amount: spokenAmount, expenseDescription: spokenDescription, currency: selectedCurrency)
+                    viewModel.addExpense(amount: spokenAmount,
+                                         expenseDescription: spokenDescription,
+                                         currency: selectedCurrency)
                 }
             }
-            // Use the item-based sheet: the sheet is only presented when expenseToEdit is non-nil.
             .sheet(item: $expenseToEdit) { expense in
-                ExpenseEditView(expense: expense,
-                                onSave: { newAmount, newExpenseDescription in
-                                    viewModel.updateExpense(expense: expense, newAmount: newAmount, newExpenseDescription: newExpenseDescription)
-                                    expenseToEdit = nil
-                                },
-                                onDelete: {
-                                    viewModel.deleteExpense(expense: expense)
-                                    expenseToEdit = nil
-                                })
+                ExpenseEditView(
+                    expense: expense,
+                    onSave: { newAmount, newExpenseDescription in
+                        viewModel.updateExpense(
+                            expense: expense,
+                            newAmount: newAmount,
+                            newExpenseDescription: newExpenseDescription
+                        )
+                        expenseToEdit = nil
+                    },
+                    onDelete: {
+                        viewModel.deleteExpense(expense: expense)
+                        expenseToEdit = nil
+                    }
+                )
             }
         }
         .onAppear {
             viewModel.setContext(modelContext)
+            // Initialize the text fields with the existing BaseAmount values
+            baseAmountSGDInput = String(baseSGD)
+            baseAmountIDRInput = String(baseIDR)
         }
     }
     
-    // Calculate remaining balance using the dynamically updating expenses.
+    // MARK: - Computed base amounts from the query
+    private var baseSGD: Double {
+        baseAmounts.first(where: { $0.currency == .SGD })?.amount ?? 0.0
+    }
+    
+    private var baseIDR: Double {
+        baseAmounts.first(where: { $0.currency == .IDR })?.amount ?? 0.0
+    }
+    
+    // MARK: - Update or Insert a BaseAmount
+    private func updateBaseAmount(currency: Currency, amount: Double) {
+        // Check if we already have a BaseAmount for this currency
+        if let existing = baseAmounts.first(where: { $0.currency == currency }) {
+            existing.amount = amount
+        } else {
+            let newBase = BaseAmount(currency: currency, amount: amount)
+            modelContext.insert(newBase)
+        }
+        // Attempt save
+        do {
+            try modelContext.save()
+        } catch {
+            print("Error saving base amount: \(error)")
+        }
+    }
+    
+    // MARK: - Balances
     private var remainingBalance: Double {
-        let base = selectedCurrency == .SGD ? viewModel.baseAmountSGD : viewModel.baseAmountIDR
+        let base = (selectedCurrency == .SGD) ? baseSGD : baseIDR
         let spent = totalSpent(currency: selectedCurrency)
         return base - spent
     }
@@ -367,7 +417,7 @@ struct ContentView: View {
     }
     
     private func calculateRatio() -> Double {
-        let base = selectedCurrency == .SGD ? viewModel.baseAmountSGD : viewModel.baseAmountIDR
+        let base = (selectedCurrency == .SGD) ? baseSGD : baseIDR
         return base > 0 ? min(max(remainingBalance / base, 0), 1) : 1.0
     }
     
@@ -393,6 +443,7 @@ struct ContentView: View {
     }
 }
 
+// MARK: - RoundedCorner helper
 extension View {
     func cornerRadius(_ radius: CGFloat, corners: UIRectCorner) -> some View {
         clipShape(RoundedCorner(radius: radius, corners: corners))
@@ -404,8 +455,11 @@ struct RoundedCorner: Shape {
     var corners: UIRectCorner = .allCorners
     
     func path(in rect: CGRect) -> Path {
-        let path = UIBezierPath(roundedRect: rect, byRoundingCorners: corners,
-                                cornerRadii: CGSize(width: radius, height: radius))
+        let path = UIBezierPath(
+            roundedRect: rect,
+            byRoundingCorners: corners,
+            cornerRadii: CGSize(width: radius, height: radius)
+        )
         return Path(path.cgPath)
     }
 }

@@ -1,8 +1,14 @@
-//
-//  BaseAmount.swift
-//  IndoSpend
-//
-//  Created by Kaushik Manian on 9/3/25.
-//
-
 import Foundation
+import SwiftData
+
+@Model
+final class BaseAmount {
+    var id: UUID = UUID()
+    var currency: Currency
+    var amount: Double
+
+    init(currency: Currency, amount: Double) {
+        self.currency = currency
+        self.amount = amount
+    }
+}

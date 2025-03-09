@@ -4,7 +4,11 @@ import SwiftData
 @main
 struct IndoSpendApp: App {
     var sharedModelContainer: ModelContainer = {
-        let schema = Schema([Expense.self, Item.self])
+        let schema = Schema([
+            Expense.self,
+            Item.self,
+            BaseAmount.self  // Add BaseAmount to the schema
+        ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
         do {
             return try ModelContainer(for: schema, configurations: [modelConfiguration])
