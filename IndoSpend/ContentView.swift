@@ -9,12 +9,12 @@ struct ContentView: View {
     @Query(sort: [SortDescriptor(\Expense.date, order: .reverse)])
     private var expenses: [Expense]
     
-    // BaseAmount query (no #Predicate)
+    // BaseAmount query (all entries)
     @Query private var baseAmounts: [BaseAmount]
     
     @State private var selectedCurrency: Currency = .SGD
     
-    // User-entered text fields for base amounts
+    // User-entered text fields for base amounts for new addition
     @State private var baseAmountSGDInput: String = ""
     @State private var baseAmountIDRInput: String = ""
     
@@ -81,15 +81,18 @@ struct ContentView: View {
                                         .focused($isBaseAmountFocused)
                                 }
                                 
-                                Text(selectedCurrency.rawValue)
-                                    .fontWeight(.semibold)
-                                    .foregroundColor(.primary)
-                                    .padding(.trailing, 8)
+                                // The currency label is now a navigation link that opens the BaseAmountListView.
+                                NavigationLink(destination: BaseAmountListView(selectedCurrency: selectedCurrency)) {
+                                    Text(selectedCurrency.rawValue)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(.primary)
+                                        .padding(.trailing, 8)
+                                }
                             }
                             .padding(.horizontal)
                         }
                         
-                        // Balance Card
+                        // Balance Card: Remaining balance as the sum of all base values minus expenses.
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Remaining Balance")
                                 .font(.subheadline)
@@ -183,7 +186,7 @@ struct ContentView: View {
                         }
                         .frame(maxHeight: .infinity)
                         
-                        // Add Expense Section
+                        // Add Expense Section (for expenses; base amount additions are handled above)
                         VStack(spacing: 12) {
                             HStack {
                                 TextField("Amount", text: $amountInput)
@@ -283,18 +286,33 @@ struct ContentView: View {
                             Spacer()
                             
                             Button(action: {
-                                // 1) Update/persist the base amount for the selected currency
+                                // Add new base amount if the base amount field is focused.
                                 if selectedCurrency == .SGD {
-                                    if let base = Double(baseAmountSGDInput) {
-                                        updateBaseAmount(currency: .SGD, amount: base)
+                                    if let newValue = Double(baseAmountSGDInput), !baseAmountSGDInput.isEmpty {
+                                        let newBase = BaseAmount(currency: .SGD, amount: newValue)
+                                        modelContext.insert(newBase)
+                                        do {
+                                            try modelContext.save()
+                                        } catch {
+                                            print("Error saving new base amount: \(error)")
+                                        }
+                                        // Refresh the text field with the updated total.
+                                        baseAmountSGDInput = String(baseSGD)
                                     }
                                 } else {
-                                    if let base = Double(baseAmountIDRInput) {
-                                        updateBaseAmount(currency: .IDR, amount: base)
+                                    if let newValue = Double(baseAmountIDRInput), !baseAmountIDRInput.isEmpty {
+                                        let newBase = BaseAmount(currency: .IDR, amount: newValue)
+                                        modelContext.insert(newBase)
+                                        do {
+                                            try modelContext.save()
+                                        } catch {
+                                            print("Error saving new base amount: \(error)")
+                                        }
+                                        baseAmountIDRInput = String(baseIDR)
                                     }
                                 }
                                 
-                                // 2) Add expense if inputs are provided
+                                // Add expense if expense inputs are provided.
                                 if let amount = Double(amountInput), !descriptionInput.isEmpty {
                                     viewModel.addExpense(
                                         amount: amount,
@@ -305,7 +323,7 @@ struct ContentView: View {
                                     descriptionInput = ""
                                 }
                                 
-                                // 3) Dismiss keyboards
+                                // Dismiss keyboards.
                                 isBaseAmountFocused = false
                                 isAmountFocused = false
                                 isDescriptionFocused = false
@@ -371,38 +389,29 @@ struct ContentView: View {
                 )
             }
         }
+        // When the view appears, set the text fields to display the current summed base amount.
         .onAppear {
             viewModel.setContext(modelContext)
-            // Initialize the text fields with the existing BaseAmount values
             baseAmountSGDInput = String(baseSGD)
             baseAmountIDRInput = String(baseIDR)
         }
+        // Also update the corresponding text field when the selected currency changes.
+        .onChange(of: selectedCurrency) { newValue in
+            if newValue == .SGD {
+                baseAmountSGDInput = String(baseSGD)
+            } else {
+                baseAmountIDRInput = String(baseIDR)
+            }
+        }
     }
     
-    // MARK: - Computed base amounts from the query
+    // MARK: - Computed base amounts (summing entries for each currency)
     private var baseSGD: Double {
-        baseAmounts.first(where: { $0.currency == .SGD })?.amount ?? 0.0
+        baseAmounts.filter { $0.currency == .SGD }.reduce(0) { $0 + $1.amount }
     }
     
     private var baseIDR: Double {
-        baseAmounts.first(where: { $0.currency == .IDR })?.amount ?? 0.0
-    }
-    
-    // MARK: - Update or Insert a BaseAmount
-    private func updateBaseAmount(currency: Currency, amount: Double) {
-        // Check if we already have a BaseAmount for this currency
-        if let existing = baseAmounts.first(where: { $0.currency == currency }) {
-            existing.amount = amount
-        } else {
-            let newBase = BaseAmount(currency: currency, amount: amount)
-            modelContext.insert(newBase)
-        }
-        // Attempt save
-        do {
-            try modelContext.save()
-        } catch {
-            print("Error saving base amount: \(error)")
-        }
+        baseAmounts.filter { $0.currency == .IDR }.reduce(0) { $0 + $1.amount }
     }
     
     // MARK: - Balances
@@ -443,7 +452,7 @@ struct ContentView: View {
     }
 }
 
-// MARK: - RoundedCorner helper
+// MARK: - RoundedCorner helper (remains unchanged)
 extension View {
     func cornerRadius(_ radius: CGFloat, corners: UIRectCorner) -> some View {
         clipShape(RoundedCorner(radius: radius, corners: corners))
