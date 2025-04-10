@@ -81,7 +81,7 @@ struct ContentView: View {
                                         .focused($isBaseAmountFocused)
                                 }
                                 
-                                // The currency label is now a navigation link that opens the BaseAmountListView.
+                                // Currency label becomes a navigation link that opens the base amount list.
                                 NavigationLink(destination: BaseAmountListView(selectedCurrency: selectedCurrency)) {
                                     Text(selectedCurrency.rawValue)
                                         .fontWeight(.semibold)
@@ -92,7 +92,7 @@ struct ContentView: View {
                             .padding(.horizontal)
                         }
                         
-                        // Balance Card: Remaining balance as the sum of all base values minus expenses.
+                        // Balance Card: Remaining balance is the sum of all base values minus expenses.
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Remaining Balance")
                                 .font(.subheadline)
@@ -395,12 +395,22 @@ struct ContentView: View {
             baseAmountSGDInput = String(baseSGD)
             baseAmountIDRInput = String(baseIDR)
         }
-        // Also update the corresponding text field when the selected currency changes.
+        // Update the text field when the selected currency changes.
         .onChange(of: selectedCurrency) { newValue in
             if newValue == .SGD {
                 baseAmountSGDInput = String(baseSGD)
             } else {
                 baseAmountIDRInput = String(baseIDR)
+            }
+        }
+        // Observe changes in the underlying baseAmounts so that the text field updates dynamically.
+        .onChange(of: baseAmounts) { _ in
+            if !isBaseAmountFocused {
+                if selectedCurrency == .SGD {
+                    baseAmountSGDInput = String(baseSGD)
+                } else {
+                    baseAmountIDRInput = String(baseIDR)
+                }
             }
         }
     }
