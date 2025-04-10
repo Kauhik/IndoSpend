@@ -1,10 +1,21 @@
 import SwiftUI
 import SwiftData
 
+// MARK: - ShareSheet Wrapper
+struct ShareSheet: UIViewControllerRepresentable {
+    let activityItems: [Any]
+    
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
+    }
+    
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
+
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @StateObject var viewModel = ExpenseViewModel()
-
+    
     // Expenses query
     @Query(sort: [SortDescriptor(\Expense.date, order: .reverse)])
     private var expenses: [Expense]
@@ -28,9 +39,63 @@ struct ContentView: View {
     @FocusState private var isBaseAmountFocused: Bool
     @FocusState private var isAmountFocused: Bool
     @FocusState private var isDescriptionFocused: Bool
-
+    
     // Expense editing
     @State private var expenseToEdit: Expense? = nil
+    
+    // State for Share sheet presentation
+    @State private var showShareSheet = false
+    
+    // MARK: - Computed Export Text
+    private var exportText: String {
+        let currency = selectedCurrency.rawValue
+        let baseEntries = baseAmounts.filter { $0.currency == selectedCurrency }
+        let baseAmountDetails = baseEntries.map { entry in
+            entry.label.isEmpty
+                ? "- \(String(format: "%.2f", entry.amount))"
+                : "- \(entry.label): \(String(format: "%.2f", entry.amount))"
+        }.joined(separator: "\n")
+        
+        let totalBase = (selectedCurrency == .SGD) ? baseSGD : baseIDR
+        let totalExpenses = totalSpent(currency: selectedCurrency)
+        let remaining = remainingBalance
+        
+        // Group expenses by day to compute average daily spending.
+        var dayTotals: [Date: Double] = [:]
+        let filteredExpenses = expenses.filter { $0.currency == selectedCurrency }
+        for expense in filteredExpenses {
+            let day = Calendar.current.startOfDay(for: expense.date)
+            dayTotals[day, default: 0.0] += expense.amount
+        }
+        let averageDaily: Double = dayTotals.isEmpty ? 0.0 : totalExpenses / Double(dayTotals.count)
+        
+        // Create detailed expense lines (sorted ascending by date)
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateStyle = .medium
+        let expenseDetails = filteredExpenses.sorted { $0.date < $1.date }
+            .map { expense in
+                let dateString = dateFormatter.string(from: expense.date)
+                return "\(dateString): \(expense.expenseDescription) - \(String(format: "%.2f", expense.amount))"
+            }
+            .joined(separator: "\n")
+        
+        let report = """
+        Spending Report (\(currency)):
+        
+        Base Amount Entries:
+        \(baseAmountDetails)
+        Total Base Amount: \(String(format: "%.2f", totalBase))
+        
+        Expenses:
+        Total Expenses: \(String(format: "%.2f", totalExpenses))
+        Average Daily Spending: \(String(format: "%.2f", averageDaily))
+        Expense Details:
+        \(expenseDetails)
+        
+        Remaining Balance: \(String(format: "%.2f", remaining))
+        """
+        return report
+    }
     
     var body: some View {
         NavigationView {
@@ -81,7 +146,7 @@ struct ContentView: View {
                                         .focused($isBaseAmountFocused)
                                 }
                                 
-                                // Currency label becomes a navigation link that opens the base amount list.
+                                // Tapping the currency opens the base amount list view.
                                 NavigationLink(destination: BaseAmountListView(selectedCurrency: selectedCurrency)) {
                                     Text(selectedCurrency.rawValue)
                                         .fontWeight(.semibold)
@@ -92,16 +157,15 @@ struct ContentView: View {
                             .padding(.horizontal)
                         }
                         
-                        // Balance Card: Remaining balance is the sum of all base values minus expenses.
+                        // Balance Card
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Remaining Balance")
                                 .font(.subheadline)
                                 .foregroundColor(.secondary)
                             
                             HStack {
-                                Text("\(remainingBalance, specifier: "%.2f")")
+                                Text("\(String(format: "%.2f", remainingBalance))")
                                     .font(.system(size: 32, weight: .bold, design: .rounded))
-                                
                                 Text(selectedCurrency.rawValue)
                                     .font(.headline)
                                     .foregroundColor(.secondary)
@@ -139,7 +203,7 @@ struct ContentView: View {
                                 VStack(spacing: 12) {
                                     Image(systemName: "creditcard.fill")
                                         .font(.system(size: 40))
-                                        .foregroundColor(.secondary.opacity(0.5))
+                                        .foregroundColor(Color.secondary.opacity(0.5))
                                     Text("No expenses yet")
                                         .font(.subheadline)
                                         .foregroundColor(.secondary)
@@ -147,7 +211,6 @@ struct ContentView: View {
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 30)
                             } else {
-                                // This ScrollView is just for the expenses list
                                 ScrollView {
                                     LazyVStack(spacing: 12) {
                                         ForEach(filteredExpenses) { expense in
@@ -170,7 +233,7 @@ struct ContentView: View {
                                                 
                                                 Spacer()
                                                 
-                                                Text("-\(expense.amount, specifier: "%.2f")")
+                                                Text("-\(String(format: "%.2f", expense.amount))")
                                                     .font(.system(.headline, design: .rounded))
                                                     .foregroundColor(.red)
                                             }
@@ -191,7 +254,7 @@ struct ContentView: View {
                         }
                         .frame(maxHeight: .infinity)
                         
-                        // Add Expense Section (for expenses; base amount additions are handled above)
+                        // Add Expense Section (original styling)
                         VStack(spacing: 12) {
                             HStack {
                                 TextField("Amount", text: $amountInput)
@@ -201,7 +264,6 @@ struct ContentView: View {
                                     .cornerRadius(10)
                                     .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
                                     .focused($isAmountFocused)
-                                
                                 Text(selectedCurrency.rawValue)
                                     .fontWeight(.semibold)
                                     .foregroundColor(.primary)
@@ -216,11 +278,9 @@ struct ContentView: View {
                                 .padding(.horizontal)
                                 .focused($isDescriptionFocused)
                             
-                            // Original layout for the buttons section
+                            // Buttons: Scan, View Chart, and Voice remain as before.
                             HStack(spacing: 20) {
-                                Button(action: {
-                                    showReceiptScanner = true
-                                }) {
+                                Button(action: { showReceiptScanner = true }) {
                                     VStack {
                                         Image(systemName: "camera.fill")
                                             .font(.system(size: 20))
@@ -228,7 +288,6 @@ struct ContentView: View {
                                             .frame(width: 50, height: 50)
                                             .background(Color.blue)
                                             .clipShape(Circle())
-                                        
                                         Text("Scan")
                                             .font(.caption)
                                             .foregroundColor(.secondary)
@@ -252,9 +311,7 @@ struct ContentView: View {
                                         .shadow(color: Color.blue.opacity(0.3), radius: 5, x: 0, y: 3)
                                 }
                                 
-                                Button(action: {
-                                    showVoiceInput = true
-                                }) {
+                                Button(action: { showVoiceInput = true }) {
                                     VStack {
                                         Image(systemName: "mic.fill")
                                             .font(.system(size: 20))
@@ -262,7 +319,6 @@ struct ContentView: View {
                                             .frame(width: 50, height: 50)
                                             .background(Color.blue)
                                             .clipShape(Circle())
-                                        
                                         Text("Voice")
                                             .font(.caption)
                                             .foregroundColor(.secondary)
@@ -287,38 +343,29 @@ struct ContentView: View {
                 if isBaseAmountFocused || isAmountFocused || isDescriptionFocused {
                     VStack {
                         Spacer()
-                        
                         HStack {
                             Spacer()
-                            
                             Button(action: {
-                                // Add new base amount if the base amount field is focused.
+                                // Add new base amount if the field is focused.
                                 if selectedCurrency == .SGD {
                                     if let newValue = Double(baseAmountSGDInput), !baseAmountSGDInput.isEmpty {
                                         let newBase = BaseAmount(currency: .SGD, amount: newValue)
                                         modelContext.insert(newBase)
-                                        do {
-                                            try modelContext.save()
-                                        } catch {
-                                            print("Error saving new base amount: \(error)")
-                                        }
-                                        // Refresh the text field with the updated total.
-                                        baseAmountSGDInput = String(baseSGD)
+                                        do { try modelContext.save() }
+                                        catch { print("Error saving new base amount: \(error)") }
+                                        baseAmountSGDInput = String(format: "%.2f", baseSGD)
                                     }
                                 } else {
                                     if let newValue = Double(baseAmountIDRInput), !baseAmountIDRInput.isEmpty {
                                         let newBase = BaseAmount(currency: .IDR, amount: newValue)
                                         modelContext.insert(newBase)
-                                        do {
-                                            try modelContext.save()
-                                        } catch {
-                                            print("Error saving new base amount: \(error)")
-                                        }
-                                        baseAmountIDRInput = String(baseIDR)
+                                        do { try modelContext.save() }
+                                        catch { print("Error saving new base amount: \(error)") }
+                                        baseAmountIDRInput = String(format: "%.2f", baseIDR)
                                     }
                                 }
                                 
-                                // Add expense if expense inputs are provided.
+                                // Add expense if expense fields are provided.
                                 if let amount = Double(amountInput), !descriptionInput.isEmpty {
                                     viewModel.addExpense(
                                         amount: amount,
@@ -352,6 +399,12 @@ struct ContentView: View {
             }
             .navigationTitle("IndoSpend")
             .toolbar {
+                // Share button added in the navigation bar trailing position.
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: { showShareSheet = true }) {
+                        Image(systemName: "square.and.arrow.up")
+                    }
+                }
                 ToolbarItem(placement: .keyboard) {
                     HStack {
                         Spacer()
@@ -365,16 +418,20 @@ struct ContentView: View {
             }
             .sheet(isPresented: $showReceiptScanner) {
                 ReceiptScannerView { recognizedAmount, recognizedDescription in
-                    viewModel.addExpense(amount: recognizedAmount,
-                                         expenseDescription: recognizedDescription,
-                                         currency: selectedCurrency)
+                    viewModel.addExpense(
+                        amount: recognizedAmount,
+                        expenseDescription: recognizedDescription,
+                        currency: selectedCurrency
+                    )
                 }
             }
             .sheet(isPresented: $showVoiceInput) {
                 VoiceInputView { spokenAmount, spokenDescription in
-                    viewModel.addExpense(amount: spokenAmount,
-                                         expenseDescription: spokenDescription,
-                                         currency: selectedCurrency)
+                    viewModel.addExpense(
+                        amount: spokenAmount,
+                        expenseDescription: spokenDescription,
+                        currency: selectedCurrency
+                    )
                 }
             }
             .sheet(item: $expenseToEdit) { expense in
@@ -395,29 +452,30 @@ struct ContentView: View {
                 )
             }
         }
-        // When the view appears, set the text fields to display the current summed base amount.
         .onAppear {
             viewModel.setContext(modelContext)
-            baseAmountSGDInput = String(baseSGD)
-            baseAmountIDRInput = String(baseIDR)
+            baseAmountSGDInput = String(format: "%.2f", baseSGD)
+            baseAmountIDRInput = String(format: "%.2f", baseIDR)
         }
-        // Update the text field when the selected currency changes.
         .onChange(of: selectedCurrency) { newValue in
             if newValue == .SGD {
-                baseAmountSGDInput = String(baseSGD)
+                baseAmountSGDInput = String(format: "%.2f", baseSGD)
             } else {
-                baseAmountIDRInput = String(baseIDR)
+                baseAmountIDRInput = String(format: "%.2f", baseIDR)
             }
         }
-        // Observe changes in the underlying baseAmounts so that the text field updates dynamically.
         .onChange(of: baseAmounts) { _ in
             if !isBaseAmountFocused {
                 if selectedCurrency == .SGD {
-                    baseAmountSGDInput = String(baseSGD)
+                    baseAmountSGDInput = String(format: "%.2f", baseSGD)
                 } else {
-                    baseAmountIDRInput = String(baseIDR)
+                    baseAmountIDRInput = String(format: "%.2f", baseIDR)
                 }
             }
+        }
+        // Present the share sheet with our export text.
+        .sheet(isPresented: $showShareSheet) {
+            ShareSheet(activityItems: [exportText])
         }
     }
     
@@ -430,7 +488,7 @@ struct ContentView: View {
         baseAmounts.filter { $0.currency == .IDR }.reduce(0) { $0 + $1.amount }
     }
     
-    // MARK: - Balances
+    // MARK: - Balances and Calculations
     private var remainingBalance: Double {
         let base = (selectedCurrency == .SGD) ? baseSGD : baseIDR
         let spent = totalSpent(currency: selectedCurrency)
@@ -447,28 +505,20 @@ struct ContentView: View {
     }
     
     private func progressColor(ratio: Double) -> Color {
-        if ratio > 0.5 {
-            return Color.green
-        } else if ratio > 0.2 {
-            return Color.yellow
-        } else {
-            return Color.red
-        }
+        if ratio > 0.5 { return Color.green }
+        else if ratio > 0.2 { return Color.yellow }
+        else { return Color.red }
     }
     
     func backgroundColor() -> Color {
         let ratio = calculateRatio()
-        if ratio > 0.5 {
-            return Color.green.opacity(0.1)
-        } else if ratio > 0.2 {
-            return Color.yellow.opacity(0.1)
-        } else {
-            return Color.red.opacity(0.1)
-        }
+        if ratio > 0.5 { return Color.green.opacity(0.1) }
+        else if ratio > 0.2 { return Color.yellow.opacity(0.1) }
+        else { return Color.red.opacity(0.1) }
     }
 }
 
-// MARK: - RoundedCorner helper (remains unchanged)
+// MARK: - RoundedCorner helper (unchanged)
 extension View {
     func cornerRadius(_ radius: CGFloat, corners: UIRectCorner) -> some View {
         clipShape(RoundedCorner(radius: radius, corners: corners))
@@ -494,3 +544,4 @@ struct ContentView_Previews: PreviewProvider {
         ContentView()
     }
 }
+
