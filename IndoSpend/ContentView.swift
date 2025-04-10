@@ -127,7 +127,7 @@ struct ContentView: View {
                         .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
                         .padding(.horizontal)
                         
-                        // Expenses List
+                        // Expenses List with its own ScrollView
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Recent Expenses")
                                 .font(.headline)
@@ -147,40 +147,45 @@ struct ContentView: View {
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 30)
                             } else {
-                                LazyVStack(spacing: 12) {
-                                    ForEach(filteredExpenses) { expense in
-                                        HStack(spacing: 16) {
-                                            Circle()
-                                                .fill(Color.blue.opacity(0.1))
-                                                .frame(width: 44, height: 44)
-                                                .overlay(
-                                                    Image(systemName: "creditcard")
-                                                        .foregroundColor(.blue)
-                                                )
-                                            
-                                            VStack(alignment: .leading, spacing: 4) {
-                                                Text(expense.expenseDescription)
-                                                    .font(.headline)
-                                                Text(expense.date, style: .date)
-                                                    .font(.caption)
-                                                    .foregroundColor(.secondary)
+                                // This ScrollView is just for the expenses list
+                                ScrollView {
+                                    LazyVStack(spacing: 12) {
+                                        ForEach(filteredExpenses) { expense in
+                                            HStack(spacing: 16) {
+                                                Circle()
+                                                    .fill(Color.blue.opacity(0.1))
+                                                    .frame(width: 44, height: 44)
+                                                    .overlay(
+                                                        Image(systemName: "creditcard")
+                                                            .foregroundColor(.blue)
+                                                    )
+                                                
+                                                VStack(alignment: .leading, spacing: 4) {
+                                                    Text(expense.expenseDescription)
+                                                        .font(.headline)
+                                                    Text(expense.date, style: .date)
+                                                        .font(.caption)
+                                                        .foregroundColor(.secondary)
+                                                }
+                                                
+                                                Spacer()
+                                                
+                                                Text("-\(expense.amount, specifier: "%.2f")")
+                                                    .font(.system(.headline, design: .rounded))
+                                                    .foregroundColor(.red)
                                             }
-                                            
-                                            Spacer()
-                                            
-                                            Text("-\(expense.amount, specifier: "%.2f")")
-                                                .font(.system(.headline, design: .rounded))
-                                                .foregroundColor(.red)
-                                        }
-                                        .padding()
-                                        .background(Color(.systemBackground))
-                                        .cornerRadius(12)
-                                        .shadow(color: Color.black.opacity(0.03), radius: 3, x: 0, y: 1)
-                                        .onTapGesture {
-                                            expenseToEdit = expense
+                                            .padding()
+                                            .background(Color(.systemBackground))
+                                            .cornerRadius(12)
+                                            .shadow(color: Color.black.opacity(0.03), radius: 3, x: 0, y: 1)
+                                            .onTapGesture {
+                                                expenseToEdit = expense
+                                            }
                                         }
                                     }
+                                    .padding(.horizontal)
                                 }
+                                .frame(height: 250) // Fixed height for the expenses scroll area
                                 .padding(.horizontal)
                             }
                         }
@@ -211,6 +216,7 @@ struct ContentView: View {
                                 .padding(.horizontal)
                                 .focused($isDescriptionFocused)
                             
+                            // Original layout for the buttons section
                             HStack(spacing: 20) {
                                 Button(action: {
                                     showReceiptScanner = true
